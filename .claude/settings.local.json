@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :5000)",
+      "Bash(findstr LISTENING)",
+      "PowerShell(Stop-Process -Id 23672 -Force)"
+    ]
+  }
+}
