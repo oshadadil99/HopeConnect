@@ -113,12 +113,18 @@ router.get('/:id/updates', requireAuth, async (req, res) => {
 
 // POST /api/cases/:id/updates — NGO adds a progress update
 router.post('/:id/updates', requireAuth, requireRole('ngo'), async (req, res) => {
-  const { update_text } = req.body;
+  const { update_text, photo_urls, update_date } = req.body;
   if (!update_text?.trim()) return res.status(400).json({ error: 'update_text is required' });
 
   const { data, error } = await supabase
     .from('case_updates')
-    .insert({ case_id: req.params.id, ngo_id: req.user.id, update_text: update_text.trim() })
+    .insert({
+      case_id: req.params.id,
+      ngo_id: req.user.id,
+      update_text: update_text.trim(),
+      photo_urls: photo_urls || [],
+      update_date: update_date || null,
+    })
     .select()
     .single();
 

@@ -39,8 +39,8 @@ export const updateCaseStatus = (id, status) =>
 // Case updates
 export const getCaseUpdates = (caseId) =>
   client.get(`/api/cases/${caseId}/updates`).then(r => r.data);
-export const addCaseUpdate = (caseId, update_text) =>
-  client.post(`/api/cases/${caseId}/updates`, { update_text }).then(r => r.data);
+export const addCaseUpdate = (caseId, payload) =>
+  client.post(`/api/cases/${caseId}/updates`, payload).then(r => r.data);
 
 // Documents
 export const getDocuments = (caseId) =>
