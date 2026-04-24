@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,6 +16,14 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [waitingForProfile, setWaitingForProfile] = useState(false);
+
+  useEffect(() => {
+    if (waitingForProfile && profile?.role) {
+      setWaitingForProfile(false);
+      navigate(ROLE_REDIRECTS[profile.role] ?? '/');
+    }
+  }, [profile, waitingForProfile, navigate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -24,10 +32,7 @@ export default function Login() {
     const { error: err } = await signIn(email, password);
     setLoading(false);
     if (err) return setError(err.message);
-    setTimeout(() => {
-      const role = profile?.role;
-      navigate(ROLE_REDIRECTS[role] ?? '/');
-    }, 300);
+    setWaitingForProfile(true);
   }
 
   return (
