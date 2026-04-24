@@ -6,12 +6,21 @@ const router = Router();
 
 // POST /api/cases — Social Worker creates a case
 router.post('/', requireAuth, requireRole('social_worker'), async (req, res) => {
-  const { child_id, needs } = req.body;
+  const { child_id, needs, district, location, concern_type, description, image_urls } = req.body;
   if (!child_id) return res.status(400).json({ error: 'child_id is required' });
 
   const { data, error } = await supabase
     .from('cases')
-    .insert({ child_id, reported_by: req.user.id, needs: needs ?? [] })
+    .insert({
+      child_id,
+      reported_by: req.user.id,
+      needs: needs ?? [],
+      district: district || null,
+      location: location || null,
+      concern_type: concern_type || null,
+      description: description || null,
+      image_urls: image_urls || [],
+    })
     .select()
     .single();
 

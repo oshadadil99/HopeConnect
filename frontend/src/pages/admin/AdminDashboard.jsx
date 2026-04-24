@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const [assigningId, setAssigningId] = useState(null);
   const [selectedNgo, setSelectedNgo] = useState('');
   const [caseBusy, setCaseBusy]   = useState(false);
+  const [viewingCase, setViewingCase] = useState(null);
 
   // ── Users state ──────────────────────────────────────────────
   const [users, setUsers]           = useState([]);
@@ -213,7 +214,7 @@ export default function AdminDashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                    {['Child', 'Reported By', 'Needs', 'Status', 'Assigned NGO', 'Actions'].map(h => (
+                    {['Child', 'Reported By', 'Needs', 'Status', 'Assigned NGO', '', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                     ))}
                   </tr>
@@ -243,6 +244,14 @@ export default function AdminDashboard() {
                         </td>
                         <td style={{ padding: '13px 16px', fontSize: 13, color: '#374151' }}>
                           {c.assigned_ngo_id ? ngoName(c.assigned_ngo_id) : <span style={{ color: '#D1D5DB' }}>Unassigned</span>}
+                        </td>
+                        <td style={{ padding: '13px 16px' }}>
+                          <button
+                            onClick={() => setViewingCase(c)}
+                            style={{ padding: '5px 12px', background: '#F9FAFB', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                          >
+                            View
+                          </button>
                         </td>
                         <td style={{ padding: '13px 16px' }}>
                           {assigningId === c.id ? (
@@ -481,6 +490,121 @@ export default function AdminDashboard() {
           </>
         )}
       </main>
+
+      {/* ── Case Detail Drawer ───────────────────────────────────── */}
+      {viewingCase && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setViewingCase(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 40 }}
+          />
+          {/* Panel */}
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: 480,
+            background: '#fff', zIndex: 50, overflowY: 'auto',
+            boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Panel header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111827' }}>
+                  {viewingCase.children?.first_name} {viewingCase.children?.last_name}
+                </h2>
+                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 3 }}>
+                  DOB: {viewingCase.children?.date_of_birth} · Case #{viewingCase.id.slice(0, 8)}
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingCase(null)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#9CA3AF', lineHeight: 1, padding: 4 }}
+              >✕</button>
+            </div>
+
+            {/* Panel body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Status + NGO row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Status</div>
+                  <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 13, fontWeight: 600, background: STATUS_STYLE[viewingCase.status].bg, color: STATUS_STYLE[viewingCase.status].text }}>
+                    {viewingCase.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Assigned NGO</div>
+                  <div style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>
+                    {viewingCase.assigned_ngo_id ? ngoName(viewingCase.assigned_ngo_id) : <span style={{ color: '#D1D5DB' }}>Unassigned</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Location */}
+              {(viewingCase.district || viewingCase.location) && (
+                <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Location</div>
+                  <div style={{ fontSize: 13, color: '#374151' }}>
+                    {[viewingCase.district, viewingCase.location].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              )}
+
+              {/* Concern type */}
+              {viewingCase.concern_type && (
+                <div style={{ background: '#FEF2F2', borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Type of Concern</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#DC2626' }}>{viewingCase.concern_type}</div>
+                </div>
+              )}
+
+              {/* Description */}
+              {viewingCase.description && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Description</div>
+                  <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, background: '#F9FAFB', borderRadius: 8, padding: '12px 14px' }}>
+                    {viewingCase.description}
+                  </div>
+                </div>
+              )}
+
+              {/* Needs */}
+              {viewingCase.needs?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Needs</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {viewingCase.needs.map(n => (
+                      <span key={n} style={{ padding: '4px 12px', background: '#EFF6FF', color: '#2563EB', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{n}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Photos */}
+              {viewingCase.image_urls?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                    Scene Photos ({viewingCase.image_urls.length})
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {viewingCase.image_urls.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                        <img src={url} alt={`scene-${i}`} style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB', cursor: 'pointer' }} />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Meta */}
+              <div style={{ borderTop: '1px solid #F3F4F6', paddingTop: 16, fontSize: 12, color: '#9CA3AF', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div>Reported by: <span style={{ color: '#6B7280' }}>{viewingCase.profiles?.full_name ?? '—'}</span></div>
+                <div>Opened: <span style={{ color: '#6B7280' }}>{new Date(viewingCase.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

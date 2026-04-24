@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { submitPublicReport } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+
+const DISTRICTS = [
+  'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo',
+  'Galle', 'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara',
+  'Kandy', 'Kegalle', 'Kilinochchi', 'Kurunegala', 'Mannar',
+  'Matale', 'Matara', 'Monaragala', 'Mullaitivu', 'Nuwara Eliya',
+  'Polonnaruwa', 'Puttalam', 'Ratnapura', 'Trincomalee', 'Vavuniya',
+];
 
 const CONCERN_TYPES = [
-  'Physical Abuse',
-  'Sexual Abuse',
-  'Emotional Abuse',
-  'Neglect',
-  'Abandonment',
-  'Child Labour',
-  'Trafficking',
-  'Domestic Violence',
-  'Other',
+  'Physical Abuse', 'Sexual Abuse', 'Emotional Abuse', 'Neglect',
+  'Abandonment', 'Child Labour', 'Trafficking', 'Domestic Violence', 'Other',
 ];
 
 const FIELD = {
@@ -20,12 +22,17 @@ const FIELD = {
   background: '#FAFAFA', fontFamily: 'inherit',
 };
 
+const EMPTY_FORM = {
+  child_name: '', child_age: '', district: '',
+  concern_type: '', description: '',
+  reporter_name: '', reporter_contact: '',
+};
+
 export default function Report() {
-  const [form, setForm] = useState({
-    child_name: '', child_age: '', location: '',
-    concern_type: '', description: '',
-    reporter_name: '', reporter_contact: '',
-  });
+  const { supabase } = useAuth();
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -34,15 +41,48 @@ export default function Report() {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  function handleFileChange(e) {
+    const selected = Array.from(e.target.files).slice(0, 5);
+    setFiles(selected);
+    Promise.all(
+      selected.map(f => new Promise(resolve => {
+        const r = new FileReader();
+        r.onload = ev => resolve(ev.target.result);
+        r.readAsDataURL(f);
+      }))
+    ).then(setPreviews);
+  }
+
+  function removeFile(idx) {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
+    setPreviews(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function uploadFiles() {
+    const urls = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop();
+      const path = `reports/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('evidence')
+        .upload(path, file, { upsert: false });
+      if (upErr) throw new Error(`Upload failed for ${file.name}: ${upErr.message}`);
+      const { data } = supabase.storage.from('evidence').getPublicUrl(path);
+      urls.push(data.publicUrl);
+    }
+    return urls;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setSubmitting(true);
     try {
-      await submitPublicReport(form);
+      const evidence_urls = files.length > 0 ? await uploadFiles() : [];
+      await submitPublicReport({ ...form, evidence_urls });
       setSubmitted(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong. Please try again.');
+      setError(err.response?.data?.error || err.message || 'Something went wrong. Please try again.');
     }
     setSubmitting(false);
   }
@@ -59,12 +99,12 @@ export default function Report() {
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button
-              onClick={() => { setSubmitted(false); setForm({ child_name: '', child_age: '', location: '', concern_type: '', description: '', reporter_name: '', reporter_contact: '' }); }}
+              onClick={() => { setSubmitted(false); setForm(EMPTY_FORM); setFiles([]); setPreviews([]); }}
               style={{ padding: '11px 24px', background: '#16A34A', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
             >
               Submit Another Report
             </button>
-            <Link to="/" style={{ padding: '11px 24px', background: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }}>
+            <Link to="/" style={{ padding: '11px 24px', background: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
               Back to Home
             </Link>
           </div>
@@ -76,7 +116,6 @@ export default function Report() {
   return (
     <div style={{ minHeight: '100vh', background: '#F9FAFB', fontFamily: 'system-ui, sans-serif' }}>
 
-      {/* Header */}
       <header style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '0 48px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 9, textDecoration: 'none' }}>
           <span style={{ fontSize: 22 }}>💙</span>
@@ -87,7 +126,6 @@ export default function Report() {
 
       <main style={{ maxWidth: 680, margin: '0 auto', padding: '48px 24px' }}>
 
-        {/* Hero text */}
         <div style={{ marginBottom: 36 }}>
           <div style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#DC2626', textTransform: 'uppercase', background: '#FEF2F2', padding: '4px 12px', borderRadius: 20, border: '1px solid #FECACA', marginBottom: 16 }}>
             Report a Child Protection Concern
@@ -101,11 +139,10 @@ export default function Report() {
           </p>
         </div>
 
-        {/* Form card */}
         <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E5E7EB', padding: '32px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 
-            {/* Section: About the child */}
+            {/* About the child */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16, paddingBottom: 8, borderBottom: '1px solid #F3F4F6' }}>
                 About the Child
@@ -113,10 +150,10 @@ export default function Report() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                    Child's Name <span style={{ color: '#EF4444' }}>*</span>
+                    Child's Name <span style={{ fontSize: 11, fontWeight: 400, color: '#9CA3AF' }}>(optional)</span>
                   </label>
                   <input
-                    type="text" required value={form.child_name}
+                    type="text" value={form.child_name}
                     onChange={e => set('child_name', e.target.value)}
                     placeholder="First and last name"
                     style={FIELD}
@@ -140,19 +177,21 @@ export default function Report() {
               </div>
             </div>
 
-            {/* Location */}
+            {/* District */}
             <div>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                Location / Area
+                District <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
-                type="text" value={form.location}
-                onChange={e => set('location', e.target.value)}
-                placeholder="e.g. Colombo 5, Galle Road"
-                style={FIELD}
+              <select
+                required value={form.district}
+                onChange={e => set('district', e.target.value)}
+                style={{ ...FIELD, cursor: 'pointer' }}
                 onFocus={e => e.target.style.borderColor = '#2563EB'}
                 onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-              />
+              >
+                <option value="">Select district…</option>
+                {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
 
             {/* Concern type */}
@@ -188,7 +227,54 @@ export default function Report() {
               />
             </div>
 
-            {/* Section: Your details */}
+            {/* Photo evidence */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #F3F4F6' }}>
+                Photo Evidence <span style={{ fontSize: 11, fontWeight: 400, color: '#9CA3AF', textTransform: 'none', letterSpacing: 0 }}>(optional — up to 5 images)</span>
+              </div>
+
+              <label style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 8, padding: '24px 16px', border: '2px dashed #D1D5DB', borderRadius: 10,
+                cursor: 'pointer', background: '#FAFAFA', transition: 'border-color 0.15s',
+              }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#2563EB'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#D1D5DB'}
+              >
+                <span style={{ fontSize: 28 }}>📷</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Click to upload photos</span>
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>JPG, PNG, WEBP — max 5 files, 10 MB each</span>
+                <input
+                  type="file" accept="image/*" multiple
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              {previews.length > 0 && (
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                  {previews.map((src, idx) => (
+                    <div key={idx} style={{ position: 'relative', width: 88, height: 88 }}>
+                      <img
+                        src={src} alt={`evidence-${idx}`}
+                        style={{ width: 88, height: 88, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB' }}
+                      />
+                      <button
+                        type="button" onClick={() => removeFile(idx)}
+                        style={{
+                          position: 'absolute', top: -6, right: -6, width: 20, height: 20,
+                          borderRadius: '50%', background: '#EF4444', border: '2px solid #fff',
+                          color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                        }}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Your details */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, paddingBottom: 8, borderBottom: '1px solid #F3F4F6' }}>
                 Your Details <span style={{ fontSize: 11, fontWeight: 400, color: '#9CA3AF', textTransform: 'none', letterSpacing: 0 }}>(optional — you may remain anonymous)</span>
@@ -219,7 +305,6 @@ export default function Report() {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
               <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>⚠️</span>
@@ -227,7 +312,6 @@ export default function Report() {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit" disabled={submitting}
               style={{

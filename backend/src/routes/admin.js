@@ -63,13 +63,22 @@ router.delete('/users/:id', requireAuth, requireRole('admin'), async (req, res) 
 
 // No auth — open to anyone
 router.post('/public-reports', async (req, res) => {
-  const { child_name, child_age, location, concern_type, description, reporter_name, reporter_contact } = req.body;
-  if (!child_name || !concern_type || !description) {
-    return res.status(400).json({ error: 'child_name, concern_type, and description are required.' });
+  const { child_name, child_age, district, concern_type, description, reporter_name, reporter_contact, evidence_urls } = req.body;
+  if (!concern_type || !description) {
+    return res.status(400).json({ error: 'concern_type and description are required.' });
   }
   const { data, error } = await supabase
     .from('public_reports')
-    .insert({ child_name, child_age, location, concern_type, description, reporter_name, reporter_contact })
+    .insert({
+      child_name: child_name || null,
+      child_age: child_age || null,
+      district: district || null,
+      concern_type,
+      description,
+      reporter_name: reporter_name || null,
+      reporter_contact: reporter_contact || null,
+      evidence_urls: evidence_urls || [],
+    })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });

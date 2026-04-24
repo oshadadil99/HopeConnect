@@ -2,6 +2,19 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import * as api from '../../services/api';
 
+const CONCERN_TYPES = [
+  'Physical Abuse', 'Sexual Abuse', 'Emotional Abuse', 'Neglect',
+  'Abandonment', 'Child Labour', 'Trafficking', 'Domestic Violence', 'Other',
+];
+
+const DISTRICTS = [
+  'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo',
+  'Galle', 'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara',
+  'Kandy', 'Kegalle', 'Kilinochchi', 'Kurunegala', 'Mannar',
+  'Matale', 'Matara', 'Monaragala', 'Mullaitivu', 'Nuwara Eliya',
+  'Polonnaruwa', 'Puttalam', 'Ratnapura', 'Trincomalee', 'Vavuniya',
+];
+
 const STATUS_COLOR = {
   pending: { bg: '#F3F4F6', text: '#6B7280' },
   assigned: { bg: '#EFF6FF', text: '#2563EB' },
@@ -14,13 +27,17 @@ const s = {
   input: { width: '100%', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 14, boxSizing: 'border-box', outline: 'none' },
 };
 
+const EMPTY_FORM = { first_name: '', last_name: '', date_of_birth: '', needs: '', district: '', location: '', concern_type: '', description: '' };
+
 export default function SocialWorkerPortal() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, supabase } = useAuth();
   const [cases, setCases] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [expandedCase, setExpandedCase] = useState(null);
   const [documents, setDocuments] = useState({});
-  const [form, setForm] = useState({ first_name: '', last_name: '', date_of_birth: '', needs: '' });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [uploadForm, setUploadForm] = useState({ document_type: 'birth_certificate', file: null });
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -52,20 +69,63 @@ export default function SocialWorkerPortal() {
     if (!documents[caseId]) loadDocuments(caseId);
   }
 
+  function handleImageChange(e) {
+    const selected = Array.from(e.target.files).slice(0, 5);
+    setImages(selected);
+    Promise.all(
+      selected.map(f => new Promise(resolve => {
+        const r = new FileReader();
+        r.onload = ev => resolve(ev.target.result);
+        r.readAsDataURL(f);
+      }))
+    ).then(setImagePreviews);
+  }
+
+  function removeImage(idx) {
+    setImages(prev => prev.filter((_, i) => i !== idx));
+    setImagePreviews(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function uploadImages() {
+    const urls = [];
+    for (const file of images) {
+      const ext = file.name.split('.').pop();
+      const path = `case-images/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('evidence')
+        .upload(path, file, { upsert: false });
+      if (upErr) throw new Error(`Upload failed for ${file.name}: ${upErr.message}`);
+      const { data } = supabase.storage.from('evidence').getPublicUrl(path);
+      urls.push(data.publicUrl);
+    }
+    return urls;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
     setMsg(null);
     try {
+      const image_urls = images.length > 0 ? await uploadImages() : [];
       const child = await api.createChild({
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         date_of_birth: form.date_of_birth,
       });
       const needs = form.needs ? form.needs.split(',').map(n => n.trim()).filter(Boolean) : [];
-      await api.createCase({ child_id: child.id, needs });
+      await api.createCase({
+        child_id: child.id,
+        needs,
+        district: form.district || null,
+        location: form.location.trim() || null,
+        concern_type: form.concern_type || null,
+        description: form.description.trim() || null,
+        image_urls,
+      });
       setMsg({ type: 'success', text: 'Case created successfully!' });
-      setForm({ first_name: '', last_name: '', date_of_birth: '', needs: '' });
+      setForm(EMPTY_FORM);
+      setImages([]);
+      setImagePreviews([]);
       setShowForm(false);
       loadCases();
     } catch (err) {
@@ -138,10 +198,74 @@ export default function SocialWorkerPortal() {
                 <label style={s.label}>Date of Birth *</label>
                 <input style={s.input} type="date" required value={form.date_of_birth} onChange={e => setForm(p => ({ ...p, date_of_birth: e.target.value }))} />
               </div>
-              <div style={{ marginBottom: 20 }}>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                <div>
+                  <label style={s.label}>District</label>
+                  <select style={{ ...s.input, cursor: 'pointer' }} value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))}>
+                    <option value="">Select district…</option>
+                    {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={s.label}>Location / Area</label>
+                  <input style={s.input} value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="e.g. Galle Road, Colombo 3" />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
                 <label style={s.label}>Needs <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(comma-separated)</span></label>
                 <input style={s.input} value={form.needs} onChange={e => setForm(p => ({ ...p, needs: e.target.value }))} placeholder="e.g. food, shelter, medical care" />
               </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={s.label}>Type of Concern *</label>
+                <select required style={{ ...s.input, cursor: 'pointer' }} value={form.concern_type} onChange={e => setForm(p => ({ ...p, concern_type: e.target.value }))}>
+                  <option value="">Select the type of concern…</option>
+                  {CONCERN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={s.label}>Describe the Situation *</label>
+                <textarea
+                  required
+                  rows={4}
+                  style={{ ...s.input, resize: 'vertical', lineHeight: 1.6 }}
+                  value={form.description}
+                  onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+                  placeholder="Please describe what you have witnessed or been told. Include as many details as you can — dates, people involved, and the child's current situation."
+                />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={s.label}>Scene Photos <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional, up to 5)</span></label>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
+                  border: '1.5px dashed #D1D5DB', borderRadius: 6, cursor: 'pointer',
+                  background: '#FAFAFA', fontSize: 13, color: '#6B7280',
+                }}>
+                  <span>📷</span>
+                  <span>{images.length > 0 ? `${images.length} photo${images.length > 1 ? 's' : ''} selected` : 'Click to upload photos'}</span>
+                  <input type="file" accept="image/*" multiple onChange={handleImageChange} style={{ display: 'none' }} />
+                </label>
+                {imagePreviews.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    {imagePreviews.map((src, idx) => (
+                      <div key={idx} style={{ position: 'relative', width: 72, height: 72 }}>
+                        <img src={src} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, border: '1px solid #E5E7EB' }} />
+                        <button type="button" onClick={() => removeImage(idx)} style={{
+                          position: 'absolute', top: -5, right: -5, width: 18, height: 18,
+                          borderRadius: '50%', background: '#EF4444', border: '2px solid #fff',
+                          color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                        }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button type="submit" disabled={submitting} style={{ padding: '9px 22px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14, opacity: submitting ? 0.7 : 1 }}>
                 {submitting ? 'Saving…' : 'Create Case'}
               </button>
