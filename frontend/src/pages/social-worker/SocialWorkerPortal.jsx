@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import * as api from '../../services/api';
 
@@ -16,22 +16,56 @@ const DISTRICTS = [
 ];
 
 const STATUS_COLOR = {
-  pending: { bg: '#F3F4F6', text: '#6B7280' },
-  assigned: { bg: '#EFF6FF', text: '#2563EB' },
-  in_progress: { bg: '#FFFBEB', text: '#D97706' },
-  resolved: { bg: '#F0FDF4', text: '#16A34A' },
+  pending: { bg: '#F8FAFC', text: '#64748B', border: '#CBD5E1' },
+  assigned: { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE' },
+  in_progress: { bg: '#E0F2FE', text: '#0369A1', border: '#7DD3FC' },
+  resolved: { bg: '#DBEAFE', text: '#1E40AF', border: '#93C5FD' },
 };
 
-const s = {
-  label: { display: 'block', marginBottom: 4, fontSize: 13, fontWeight: 500, color: '#374151' },
-  input: { width: '100%', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 14, boxSizing: 'border-box', outline: 'none' },
+const FILTERS = ['all', 'pending', 'assigned', 'in_progress', 'resolved'];
+const EMPTY_FORM = {
+  first_name: '',
+  last_name: '',
+  date_of_birth: '',
+  needs: '',
+  district: '',
+  location: '',
+  concern_type: '',
+  description: '',
 };
 
-const EMPTY_FORM = { first_name: '', last_name: '', date_of_birth: '', needs: '', district: '', location: '', concern_type: '', description: '' };
+const inputStyle = {
+  width: '100%',
+  padding: '11px 13px',
+  border: '1px solid #BFDBFE',
+  borderRadius: 12,
+  fontSize: 14,
+  boxSizing: 'border-box',
+  outline: 'none',
+  background: '#fff',
+  fontFamily: 'inherit',
+};
+
+const labelStyle = {
+  display: 'block',
+  marginBottom: 6,
+  fontSize: 12,
+  fontWeight: 800,
+  color: '#1E3A8A',
+};
+
+function prettyStatus(status) {
+  return status?.replace('_', ' ') ?? 'unknown';
+}
+
+function childName(c) {
+  return `${c.children?.first_name ?? ''} ${c.children?.last_name ?? ''}`.trim() || 'Unnamed child';
+}
 
 export default function SocialWorkerPortal() {
   const { profile, signOut, supabase } = useAuth();
   const [cases, setCases] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [expandedCase, setExpandedCase] = useState(null);
   const [documents, setDocuments] = useState({});
@@ -42,41 +76,75 @@ export default function SocialWorkerPortal() {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
 
-  useEffect(() => { loadCases(); }, []);
+  useEffect(() => {
+    loadCases();
+  }, []);
 
   async function loadCases() {
+    setLoading(true);
     try {
-      const data = await api.getCases();
-      setCases(data);
+      setCases(await api.getCases());
     } catch {
       setMsg({ type: 'error', text: 'Failed to load cases.' });
     }
+    setLoading(false);
   }
+
+  const stats = useMemo(() => ({
+    total: cases.length,
+    pending: cases.filter(c => c.status === 'pending').length,
+    active: cases.filter(c => ['assigned', 'in_progress'].includes(c.status)).length,
+    resolved: cases.filter(c => c.status === 'resolved').length,
+  }), [cases]);
+
+  const visibleCases = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return cases.filter(c => {
+      const matchesFilter = filter === 'all' || c.status === filter;
+      const haystack = [
+        childName(c),
+        c.district,
+        c.location,
+        c.concern_type,
+        ...(c.needs ?? []),
+      ].filter(Boolean).join(' ').toLowerCase();
+      return matchesFilter && (!q || haystack.includes(q));
+    });
+  }, [cases, filter, query]);
 
   async function loadDocuments(caseId) {
     try {
-      const data = await api.getDocuments(caseId);
-      setDocuments(prev => ({ ...prev, [caseId]: data }));
+      const caseDocuments = await api.getDocuments(caseId);
+      setDocuments(prev => ({ ...prev, [caseId]: caseDocuments }));
     } catch {
       setDocuments(prev => ({ ...prev, [caseId]: [] }));
     }
   }
 
   function toggleCase(caseId) {
-    if (expandedCase === caseId) { setExpandedCase(null); return; }
+    if (expandedCase === caseId) {
+      setExpandedCase(null);
+      return;
+    }
     setExpandedCase(caseId);
     if (!documents[caseId]) loadDocuments(caseId);
+  }
+
+  function setField(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
   }
 
   function handleImageChange(e) {
     const selected = Array.from(e.target.files).slice(0, 5);
     setImages(selected);
     Promise.all(
-      selected.map(f => new Promise(resolve => {
-        const r = new FileReader();
-        r.onload = ev => resolve(ev.target.result);
-        r.readAsDataURL(f);
+      selected.map(file => new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = ev => resolve(ev.target.result);
+        reader.readAsDataURL(file);
       }))
     ).then(setImagePreviews);
   }
@@ -91,10 +159,8 @@ export default function SocialWorkerPortal() {
     for (const file of images) {
       const ext = file.name.split('.').pop();
       const path = `case-images/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('evidence')
-        .upload(path, file, { upsert: false });
-      if (upErr) throw new Error(`Upload failed for ${file.name}: ${upErr.message}`);
+      const { error } = await supabase.storage.from('evidence').upload(path, file, { upsert: false });
+      if (error) throw new Error(`Upload failed for ${file.name}: ${error.message}`);
       const { data } = supabase.storage.from('evidence').getPublicUrl(path);
       urls.push(data.publicUrl);
     }
@@ -112,24 +178,23 @@ export default function SocialWorkerPortal() {
         last_name: form.last_name.trim(),
         date_of_birth: form.date_of_birth,
       });
-      const needs = form.needs ? form.needs.split(',').map(n => n.trim()).filter(Boolean) : [];
       await api.createCase({
         child_id: child.id,
-        needs,
+        needs: form.needs ? form.needs.split(',').map(n => n.trim()).filter(Boolean) : [],
         district: form.district || null,
         location: form.location.trim() || null,
         concern_type: form.concern_type || null,
         description: form.description.trim() || null,
         image_urls,
       });
-      setMsg({ type: 'success', text: 'Case created successfully!' });
+      setMsg({ type: 'success', text: 'Case created successfully.' });
       setForm(EMPTY_FORM);
       setImages([]);
       setImagePreviews([]);
       setShowForm(false);
       loadCases();
     } catch (err) {
-      setMsg({ type: 'error', text: err.response?.data?.error || 'Error creating case.' });
+      setMsg({ type: 'error', text: err.response?.data?.error || err.message || 'Error creating case.' });
     }
     setSubmitting(false);
   }
@@ -140,7 +205,7 @@ export default function SocialWorkerPortal() {
     setUploading(true);
     try {
       await api.uploadDocument(caseId, uploadForm.document_type, uploadForm.file);
-      setUploadForm(p => ({ ...p, file: null }));
+      setUploadForm({ document_type: 'birth_certificate', file: null });
       e.target.reset();
       loadDocuments(caseId);
     } catch (err) {
@@ -150,209 +215,205 @@ export default function SocialWorkerPortal() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F9FAFB', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Header */}
-      <header style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '14px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 18, color: '#111827' }}>HopeConnect</div>
-          <div style={{ fontSize: 13, color: '#6B7280' }}>Social Worker Portal · {profile?.full_name}</div>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#EFF6FF 0%,#F8FBFF 42%,#FFFFFF 100%)', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0F172A' }}>
+      <header style={{ background: 'rgba(255,255,255,0.88)', borderBottom: '1px solid #DBEAFE', backdropFilter: 'blur(14px)', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ padding: '16px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#BFDBFE,#60A5FA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: '#1E3A8A' }}>SW</div>
+            <div>
+              <div style={{ fontWeight: 850, fontSize: 18 }}>HopeConnect</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>Social Worker Workspace · {profile?.full_name}</div>
+            </div>
+          </div>
+          <button onClick={signOut} style={{ padding: '9px 16px', border: '1px solid #BFDBFE', borderRadius: 10, background: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#1E40AF' }}>Sign Out</button>
         </div>
-        <button onClick={signOut} style={{ padding: '7px 16px', border: '1px solid #D1D5DB', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 14, color: '#374151' }}>Sign Out</button>
       </header>
 
-      <main style={{ maxWidth: 860, margin: '0 auto', padding: '32px 24px' }}>
-        {/* Action bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 17, color: '#111827' }}>My Cases <span style={{ color: '#9CA3AF', fontWeight: 400 }}>({cases.length})</span></h2>
-          <button
-            onClick={() => { setShowForm(v => !v); setMsg(null); }}
-            style={{ padding: '9px 18px', background: showForm ? '#F3F4F6' : '#2563EB', color: showForm ? '#374151' : '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
-          >
-            {showForm ? 'Cancel' : '+ New Case'}
-          </button>
-        </div>
+      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '30px 24px 56px' }}>
+        <section style={{ background: 'linear-gradient(135deg,#DBEAFE,#F8FBFF)', border: '1px solid #BFDBFE', borderRadius: 18, padding: 24, boxShadow: '0 18px 46px rgba(37,99,235,0.12)', marginBottom: 22 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 850, color: '#2563EB', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Field case registration</div>
+              <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.15 }}>Create cases, attach evidence, follow progress.</h1>
+              <p style={{ margin: '10px 0 0', color: '#475569', fontSize: 14, lineHeight: 1.7, maxWidth: 650 }}>Register children, record concern details, upload scene photos, and manage supporting documents from one workspace.</p>
+            </div>
+            <button onClick={() => { setShowForm(v => !v); setMsg(null); }} style={{ padding: '12px 18px', border: 'none', borderRadius: 12, background: showForm ? '#E2E8F0' : '#93C5FD', color: '#0F172A', fontWeight: 850, cursor: 'pointer' }}>{showForm ? 'Close Form' : '+ New Case'}</button>
+          </div>
+        </section>
 
-        {/* Flash message */}
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginBottom: 22 }}>
+          {[
+            ['My Cases', stats.total, '#1E3A8A'],
+            ['Pending', stats.pending, '#64748B'],
+            ['Active', stats.active, '#0369A1'],
+            ['Resolved', stats.resolved, '#1E40AF'],
+          ].map(([label, value, color]) => (
+            <div key={label} style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 14, padding: 16, boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }}>
+              <div style={{ fontSize: 12, color: '#64748B', fontWeight: 750 }}>{label}</div>
+              <div style={{ marginTop: 6, fontSize: 30, fontWeight: 900, color }}>{value}</div>
+            </div>
+          ))}
+        </section>
+
         {msg && (
-          <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 6, background: msg.type === 'error' ? '#FEF2F2' : '#F0FDF4', color: msg.type === 'error' ? '#DC2626' : '#16A34A', fontSize: 14 }}>
+          <div style={{ marginBottom: 18, padding: '12px 14px', borderRadius: 12, background: msg.type === 'error' ? '#FEF2F2' : '#EFF6FF', color: msg.type === 'error' ? '#B91C1C' : '#1E40AF', border: `1px solid ${msg.type === 'error' ? '#FECACA' : '#BFDBFE'}`, fontSize: 14, fontWeight: 650 }}>
             {msg.text}
           </div>
         )}
 
-        {/* New Case Form */}
         {showForm && (
-          <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E5E7EB', padding: 24, marginBottom: 24 }}>
-            <h3 style={{ margin: '0 0 18px', fontSize: 15, color: '#111827' }}>Register New Case</h3>
+          <section style={{ background: '#fff', borderRadius: 18, border: '1px solid #DBEAFE', padding: 22, marginBottom: 22, boxShadow: '0 14px 40px rgba(15,23,42,0.06)' }}>
+            <div style={{ marginBottom: 18 }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Register New Case</h2>
+              <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 13 }}>Capture the core child, location, need, concern, and evidence details.</p>
+            </div>
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-                <div>
-                  <label style={s.label}>First Name *</label>
-                  <input style={s.input} required value={form.first_name} onChange={e => setForm(p => ({ ...p, first_name: e.target.value }))} placeholder="Child's first name" />
-                </div>
-                <div>
-                  <label style={s.label}>Last Name *</label>
-                  <input style={s.input} required value={form.last_name} onChange={e => setForm(p => ({ ...p, last_name: e.target.value }))} placeholder="Child's last name" />
-                </div>
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <label style={s.label}>Date of Birth *</label>
-                <input style={s.input} type="date" required value={form.date_of_birth} onChange={e => setForm(p => ({ ...p, date_of_birth: e.target.value }))} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14, marginBottom: 14 }}>
+                <Field label="First Name *"><input style={inputStyle} required value={form.first_name} onChange={e => setField('first_name', e.target.value)} placeholder="Child's first name" /></Field>
+                <Field label="Last Name *"><input style={inputStyle} required value={form.last_name} onChange={e => setField('last_name', e.target.value)} placeholder="Child's last name" /></Field>
+                <Field label="Date of Birth *"><input style={inputStyle} type="date" required value={form.date_of_birth} onChange={e => setField('date_of_birth', e.target.value)} /></Field>
+                <Field label="District"><select style={inputStyle} value={form.district} onChange={e => setField('district', e.target.value)}><option value="">Select district...</option>{DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}</select></Field>
+                <Field label="Location / Area"><input style={inputStyle} value={form.location} onChange={e => setField('location', e.target.value)} placeholder="e.g. Galle Road, Colombo 3" /></Field>
+                <Field label="Needs"><input style={inputStyle} value={form.needs} onChange={e => setField('needs', e.target.value)} placeholder="food, shelter, medical care" /></Field>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-                <div>
-                  <label style={s.label}>District</label>
-                  <select style={{ ...s.input, cursor: 'pointer' }} value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))}>
-                    <option value="">Select district…</option>
-                    {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={s.label}>Location / Area</label>
-                  <input style={s.input} value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="e.g. Galle Road, Colombo 3" />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14, marginBottom: 14 }}>
+                <Field label="Type of Concern *"><select required style={inputStyle} value={form.concern_type} onChange={e => setField('concern_type', e.target.value)}><option value="">Select concern type...</option>{CONCERN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
+                <Field label="Describe the Situation *"><textarea required rows={4} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Describe what happened, current situation, and immediate risks." /></Field>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <label style={s.label}>Needs <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(comma-separated)</span></label>
-                <input style={s.input} value={form.needs} onChange={e => setForm(p => ({ ...p, needs: e.target.value }))} placeholder="e.g. food, shelter, medical care" />
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={s.label}>Type of Concern *</label>
-                <select required style={{ ...s.input, cursor: 'pointer' }} value={form.concern_type} onChange={e => setForm(p => ({ ...p, concern_type: e.target.value }))}>
-                  <option value="">Select the type of concern…</option>
-                  {CONCERN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={s.label}>Describe the Situation *</label>
-                <textarea
-                  required
-                  rows={4}
-                  style={{ ...s.input, resize: 'vertical', lineHeight: 1.6 }}
-                  value={form.description}
-                  onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Please describe what you have witnessed or been told. Include as many details as you can — dates, people involved, and the child's current situation."
-                />
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label style={s.label}>Scene Photos <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional, up to 5)</span></label>
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-                  border: '1.5px dashed #D1D5DB', borderRadius: 6, cursor: 'pointer',
-                  background: '#FAFAFA', fontSize: 13, color: '#6B7280',
-                }}>
-                  <span>📷</span>
-                  <span>{images.length > 0 ? `${images.length} photo${images.length > 1 ? 's' : ''} selected` : 'Click to upload photos'}</span>
+              <div style={{ marginBottom: 18 }}>
+                <label style={labelStyle}>Scene Photos <span style={{ color: '#94A3B8', fontWeight: 500 }}>(optional, up to 5)</span></label>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '18px 14px', border: '1.5px dashed #93C5FD', borderRadius: 14, cursor: 'pointer', background: '#F8FBFF', fontSize: 13, color: '#2563EB', fontWeight: 800 }}>
+                  {images.length > 0 ? `${images.length} photo${images.length > 1 ? 's' : ''} selected` : 'Click to upload photos'}
                   <input type="file" accept="image/*" multiple onChange={handleImageChange} style={{ display: 'none' }} />
                 </label>
                 {imagePreviews.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                     {imagePreviews.map((src, idx) => (
-                      <div key={idx} style={{ position: 'relative', width: 72, height: 72 }}>
-                        <img src={src} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, border: '1px solid #E5E7EB' }} />
-                        <button type="button" onClick={() => removeImage(idx)} style={{
-                          position: 'absolute', top: -5, right: -5, width: 18, height: 18,
-                          borderRadius: '50%', background: '#EF4444', border: '2px solid #fff',
-                          color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-                        }}>✕</button>
+                      <div key={idx} style={{ position: 'relative', width: 76, height: 76 }}>
+                        <img src={src} alt="" style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: 12, border: '1px solid #DBEAFE' }} />
+                        <button type="button" onClick={() => removeImage(idx)} style={{ position: 'absolute', top: -5, right: -5, width: 20, height: 20, borderRadius: '50%', background: '#2563EB', border: '2px solid #fff', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>x</button>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              <button type="submit" disabled={submitting} style={{ padding: '9px 22px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14, opacity: submitting ? 0.7 : 1 }}>
-                {submitting ? 'Saving…' : 'Create Case'}
+              <button type="submit" disabled={submitting} style={{ padding: '11px 22px', background: submitting ? '#BFDBFE' : '#2563EB', color: '#fff', border: 'none', borderRadius: 12, cursor: submitting ? 'not-allowed' : 'pointer', fontWeight: 850, fontSize: 14 }}>
+                {submitting ? 'Saving...' : 'Create Case'}
               </button>
             </form>
-          </div>
+          </section>
         )}
 
-        {/* Cases list */}
-        {cases.length === 0 && !showForm ? (
-          <div style={{ textAlign: 'center', padding: 64, color: '#9CA3AF' }}>No cases yet. Click "+ New Case" to get started.</div>
-        ) : (
-          cases.map(c => (
-            <div key={c.id} style={{ background: '#fff', borderRadius: 8, border: '1px solid #E5E7EB', marginBottom: 10 }}>
-              {/* Case row */}
-              <div
-                onClick={() => toggleCase(c.id)}
-                style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
-              >
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 600, color: '#111827', fontSize: 15 }}>
-                    {c.children?.first_name} {c.children?.last_name}
-                  </span>
-                  <span style={{ marginLeft: 10, fontSize: 12, color: '#9CA3AF' }}>DOB: {c.children?.date_of_birth}</span>
-                  {c.needs?.length > 0 && (
-                    <span style={{ marginLeft: 12, fontSize: 12, color: '#2563EB' }}>· {c.needs.join(', ')}</span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: STATUS_COLOR[c.status].bg, color: STATUS_COLOR[c.status].text }}>
-                    {c.status.replace('_', ' ')}
-                  </span>
-                  <span style={{ fontSize: 11, color: '#C4C4C4' }}>{expandedCase === c.id ? '▲' : '▼'}</span>
-                </div>
-              </div>
-
-              {/* Expanded panel */}
-              {expandedCase === c.id && (
-                <div style={{ padding: '4px 18px 18px', borderTop: '1px solid #F3F4F6' }}>
-                  <p style={{ margin: '10px 0 14px', fontSize: 12, color: '#9CA3AF' }}>Opened {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-
-                  {/* Documents */}
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Documents</div>
-                    {!documents[c.id] ? (
-                      <p style={{ fontSize: 13, color: '#9CA3AF' }}>Loading…</p>
-                    ) : documents[c.id].length === 0 ? (
-                      <p style={{ fontSize: 13, color: '#9CA3AF' }}>No documents uploaded yet.</p>
-                    ) : (
-                      documents[c.id].map(doc => (
-                        <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #F9FAFB', fontSize: 13 }}>
-                          <span style={{ color: '#374151', textTransform: 'capitalize' }}>{doc.document_type.replace(/_/g, ' ')}</span>
-                          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                            <span style={{ color: doc.verification_status === 'verified' ? '#16A34A' : doc.verification_status === 'rejected' ? '#DC2626' : '#9CA3AF', fontSize: 12 }}>
-                              {doc.verification_status}
-                            </span>
-                            <a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563EB', textDecoration: 'none' }}>View ↗</a>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Upload form */}
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Upload Document</div>
-                  <form onSubmit={e => handleUpload(e, c.id)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div>
-                      <label style={{ ...s.label, fontSize: 12 }}>Type</label>
-                      <select style={{ ...s.input, width: 'auto' }} value={uploadForm.document_type} onChange={e => setUploadForm(p => ({ ...p, document_type: e.target.value }))}>
-                        <option value="birth_certificate">Birth Certificate</option>
-                        <option value="medical_report">Medical Report</option>
-                        <option value="police_report">Police Report</option>
-                      </select>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 180 }}>
-                      <label style={{ ...s.label, fontSize: 12 }}>File</label>
-                      <input type="file" style={{ ...s.input, paddingTop: 6 }} onChange={e => setUploadForm(p => ({ ...p, file: e.target.files[0] }))} />
-                    </div>
-                    <button type="submit" disabled={uploading || !uploadForm.file} style={{ padding: '8px 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: uploading ? 0.7 : 1, whiteSpace: 'nowrap' }}>
-                      {uploading ? 'Uploading…' : 'Upload'}
-                    </button>
-                  </form>
-                </div>
-              )}
+        <section style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 18, boxShadow: '0 14px 40px rgba(15,23,42,0.06)', overflow: 'hidden' }}>
+          <div style={{ padding: 18, borderBottom: '1px solid #EAF2FF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 17 }}>My Cases <span style={{ color: '#94A3B8', fontWeight: 500 }}>({visibleCases.length})</span></h2>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748B' }}>Open a case to review evidence and upload supporting documents.</p>
             </div>
-          ))
-        )}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search child, district, need..." style={{ width: 240, padding: '10px 12px', border: '1px solid #BFDBFE', borderRadius: 12, outline: 'none', fontSize: 13, background: '#F8FBFF' }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                {FILTERS.map(f => <button key={f} onClick={() => setFilter(f)} style={{ padding: '8px 12px', borderRadius: 999, border: filter === f ? 'none' : '1px solid #DBEAFE', background: filter === f ? '#93C5FD' : '#fff', color: filter === f ? '#0F172A' : '#475569', fontSize: 12, fontWeight: 800, cursor: 'pointer', textTransform: 'capitalize' }}>{prettyStatus(f)}</button>)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: 18 }}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: 64, color: '#94A3B8' }}>Loading cases...</div>
+            ) : visibleCases.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 64, color: '#94A3B8' }}>No cases match the current view.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
+                {visibleCases.map(c => {
+                  const isOpen = expandedCase === c.id;
+                  const status = STATUS_COLOR[c.status] ?? STATUS_COLOR.pending;
+                  return (
+                    <article key={c.id} style={{ background: isOpen ? '#F8FBFF' : '#fff', borderRadius: 16, border: `1px solid ${isOpen ? '#93C5FD' : '#E2E8F0'}`, overflow: 'hidden', boxShadow: isOpen ? '0 12px 32px rgba(37,99,235,0.12)' : '0 6px 18px rgba(15,23,42,0.04)' }}>
+                      <button onClick={() => toggleCase(c.id)} style={{ width: '100%', background: 'transparent', border: 'none', padding: 18, cursor: 'pointer', textAlign: 'left' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ fontSize: 16, fontWeight: 850, color: '#0F172A' }}>{childName(c)}</div>
+                            <div style={{ marginTop: 5, fontSize: 12, color: '#64748B' }}>DOB: {c.children?.date_of_birth || 'Not recorded'} · {c.district || 'District unavailable'}</div>
+                          </div>
+                          <span style={{ padding: '5px 11px', borderRadius: 999, fontSize: 12, fontWeight: 800, background: status.bg, color: status.text, border: `1px solid ${status.border}` }}>{prettyStatus(c.status)}</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 14 }}>
+                          {c.concern_type && <span style={{ fontSize: 12, background: '#EFF6FF', color: '#2563EB', padding: '4px 10px', borderRadius: 999, fontWeight: 700 }}>{c.concern_type}</span>}
+                          {c.needs?.slice(0, 3).map(n => <span key={n} style={{ fontSize: 12, background: '#F1F5F9', color: '#475569', padding: '4px 10px', borderRadius: 999 }}>{n}</span>)}
+                        </div>
+
+                        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', color: '#94A3B8', fontSize: 12 }}>
+                          <span>Opened {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          <span>{isOpen ? 'Close details' : 'Open details'} {isOpen ? '▲' : '▼'}</span>
+                        </div>
+                      </button>
+
+                      {isOpen && (
+                        <div style={{ borderTop: '1px solid #DBEAFE', padding: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
+                          <div style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 14, padding: 14 }}>
+                            <div style={{ fontSize: 11, fontWeight: 850, color: '#2563EB', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Case Summary</div>
+                            {c.description ? <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.7 }}>{c.description}</p> : <p style={{ margin: 0, fontSize: 13, color: '#94A3B8' }}>No description provided.</p>}
+                            {c.location && <div style={{ marginTop: 10, fontSize: 12, color: '#64748B' }}>Location: <strong>{c.location}</strong></div>}
+                          </div>
+
+                          {c.image_urls?.length > 0 && (
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 8 }}>Scene Photos</div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{c.image_urls.map((url, i) => <a key={i} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt="" style={{ width: 86, height: 86, objectFit: 'cover', borderRadius: 12, border: '2px solid #DBEAFE' }} /></a>)}</div>
+                            </div>
+                          )}
+
+                          <Panel title={`Documents (${documents[c.id]?.length ?? 0})`}>
+                            {!documents[c.id] ? <Muted>Loading...</Muted> : documents[c.id].length === 0 ? <Muted>No documents uploaded yet.</Muted> : documents[c.id].map(doc => (
+                              <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderBottom: '1px solid #EAF2FF', fontSize: 13 }}>
+                                <span style={{ color: '#334155', textTransform: 'capitalize' }}>{doc.document_type.replace(/_/g, ' ')}</span>
+                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 800 }}>View</a>
+                              </div>
+                            ))}
+                          </Panel>
+
+                          <form onSubmit={e => handleUpload(e, c.id)} style={{ background: '#fff', borderRadius: 14, padding: 14, border: '1px solid #DBEAFE', display: 'grid', gridTemplateColumns: '170px 1fr auto', gap: 10, alignItems: 'end' }}>
+                            <Field label="Document Type"><select style={inputStyle} value={uploadForm.document_type} onChange={e => setUploadForm(p => ({ ...p, document_type: e.target.value }))}><option value="birth_certificate">Birth Certificate</option><option value="medical_report">Medical Report</option><option value="police_report">Police Report</option></select></Field>
+                            <Field label="File"><input type="file" style={{ ...inputStyle, paddingTop: 9 }} onChange={e => setUploadForm(p => ({ ...p, file: e.target.files[0] }))} /></Field>
+                            <button type="submit" disabled={uploading || !uploadForm.file} style={{ padding: '11px 18px', background: uploading ? '#BFDBFE' : '#2563EB', color: '#fff', border: 'none', borderRadius: 12, cursor: uploading ? 'not-allowed' : 'pointer', fontWeight: 850, fontSize: 13, whiteSpace: 'nowrap' }}>{uploading ? 'Uploading...' : 'Upload'}</button>
+                          </form>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
       </main>
     </div>
   );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Panel({ title, children }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 14, padding: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 850, color: '#2563EB', marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function Muted({ children }) {
+  return <p style={{ margin: 0, color: '#94A3B8', fontSize: 13 }}>{children}</p>;
 }

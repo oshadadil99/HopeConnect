@@ -245,7 +245,7 @@ export default function AdminDashboard() {
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
       <style>{`
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes modalIn { from { transform: translate(-50%, calc(-50% + 16px)) scale(0.98); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
         @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
         .tr-hover:hover { background: ${T.cardAlt} !important; }
         .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,${darkMode ? '0.4' : '0.1'}) !important; }
@@ -730,11 +730,11 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* ── Case Detail Drawer ── */}
+      {/* ── Case Detail Modal ── */}
       {viewingCase && (
         <>
-          <div onClick={() => setViewingCase(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 100, animation: 'fadeIn 0.2s ease', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 500, background: T.drawerBg, zIndex: 101, overflowY: 'auto', boxShadow: '-8px 0 40px rgba(0,0,0,0.25)', animation: 'slideIn 0.25s cubic-bezier(0.4,0,0.2,1)', display: 'flex', flexDirection: 'column' }}>
+          <div onClick={() => setViewingCase(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.68)', zIndex: 100, animation: 'fadeIn 0.2s ease', backdropFilter: 'blur(3px)' }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', width: 'min(920px, calc(100vw - 48px))', maxHeight: 'min(860px, calc(100vh - 48px))', transform: 'translate(-50%, -50%)', background: T.drawerBg, zIndex: 101, overflowY: 'auto', boxShadow: '0 28px 90px rgba(0,0,0,0.35)', animation: 'modalIn 0.22s cubic-bezier(0.4,0,0.2,1)', display: 'flex', flexDirection: 'column', borderRadius: 18 }}>
             <div style={{ background: 'linear-gradient(135deg,#0F172A,#1E3A8A)', padding: '24px', position: 'relative' }}>
               <button onClick={() => setViewingCase(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', color: '#fff', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 14 }}>
@@ -852,3 +852,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
