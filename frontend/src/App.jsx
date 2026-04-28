@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Chatbot from './components/Chatbot';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Report from './pages/Report';
@@ -12,6 +13,7 @@ import SocialWorkerPortal from './pages/social-worker/SocialWorkerPortal';
 export default function App() {
   return (
     <AuthProvider>
+      <Chatbot />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/report" element={<Report />} />

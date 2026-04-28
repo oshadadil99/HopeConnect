@@ -74,3 +74,7 @@ export const updatePublicReportStatus = (id, status) =>
 // Public — no auth required
 export const submitPublicReport = (payload) =>
   publicClient.post('/api/admin/public-reports', payload).then(r => r.data);
+
+// Chatbot
+export const askChatbot = (question) =>
+  publicClient.post('/api/chatbot', { question }).then(r => r.data);

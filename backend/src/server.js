@@ -6,6 +6,7 @@ import documentsRouter from './routes/documents.js';
 import childrenRouter from './routes/children.js';
 import profilesRouter from './routes/profiles.js';
 import adminRouter from './routes/admin.js';
+import chatbotRouter from './routes/chatbot.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +21,7 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/children', childrenRouter);
 app.use('/api/profiles', profilesRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/chatbot', chatbotRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);
