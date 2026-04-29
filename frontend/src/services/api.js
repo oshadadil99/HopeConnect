@@ -75,6 +75,13 @@ export const updatePublicReportStatus = (id, status) =>
 export const submitPublicReport = (payload) =>
   publicClient.post('/api/admin/public-reports', payload).then(r => r.data);
 
+// Document AI extraction
+export const extractDocument = (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return client.post('/api/documents/extract', form).then(r => r.data);
+};
+
 // Chatbot
 export const askChatbot = (question) =>
   publicClient.post('/api/chatbot', { question }).then(r => r.data);

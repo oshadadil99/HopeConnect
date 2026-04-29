@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import * as api from '../../services/api';
+import DocumentUploadForm from '../../components/DocumentUploadForm';
 
 const CONCERN_TYPES = [
   'Physical Abuse', 'Sexual Abuse', 'Emotional Abuse', 'Neglect',
@@ -78,6 +79,7 @@ export default function SocialWorkerPortal() {
   const [msg, setMsg] = useState(null);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
+  const [showDocVerify, setShowDocVerify] = useState(false);
 
   useEffect(() => {
     loadCases();
@@ -167,6 +169,19 @@ export default function SocialWorkerPortal() {
     return urls;
   }
 
+  function handleDocSaved(_child, extracted) {
+    setForm(prev => ({
+      ...prev,
+      first_name: extracted.firstName || prev.first_name,
+      last_name: extracted.lastName || prev.last_name,
+      date_of_birth: extracted.dateOfBirth || prev.date_of_birth,
+      district: extracted.district || prev.district,
+    }));
+    setShowDocVerify(false);
+    setShowForm(true);
+    setMsg({ type: 'success', text: 'Document verified — child details have been filled in. Complete the case form below.' });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
@@ -237,7 +252,15 @@ export default function SocialWorkerPortal() {
               <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.15 }}>Create cases, attach evidence, follow progress.</h1>
               <p style={{ margin: '10px 0 0', color: '#475569', fontSize: 14, lineHeight: 1.7, maxWidth: 650 }}>Register children, record concern details, upload scene photos, and manage supporting documents from one workspace.</p>
             </div>
-            <button onClick={() => { setShowForm(v => !v); setMsg(null); }} style={{ padding: '12px 18px', border: 'none', borderRadius: 12, background: showForm ? '#E2E8F0' : '#93C5FD', color: '#0F172A', fontWeight: 850, cursor: 'pointer' }}>{showForm ? 'Close Form' : '+ New Case'}</button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowDocVerify(v => !v); setShowForm(false); setMsg(null); }}
+                style={{ padding: '12px 18px', border: '1px solid #BFDBFE', borderRadius: 12, background: showDocVerify ? '#E2E8F0' : '#fff', color: '#1E40AF', fontWeight: 850, cursor: 'pointer', fontSize: 14 }}
+              >
+                {showDocVerify ? 'Close Verifier' : 'Verify Document'}
+              </button>
+              <button onClick={() => { setShowForm(v => !v); setShowDocVerify(false); setMsg(null); }} style={{ padding: '12px 18px', border: 'none', borderRadius: 12, background: showForm ? '#E2E8F0' : '#93C5FD', color: '#0F172A', fontWeight: 850, cursor: 'pointer' }}>{showForm ? 'Close Form' : '+ New Case'}</button>
+            </div>
           </div>
         </section>
 
@@ -254,6 +277,18 @@ export default function SocialWorkerPortal() {
             </div>
           ))}
         </section>
+
+        {showDocVerify && (
+          <section style={{ background: '#fff', borderRadius: 18, border: '1px solid #BFDBFE', padding: 22, marginBottom: 22, boxShadow: '0 14px 40px rgba(15,23,42,0.06)' }}>
+            <div style={{ marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Verify Document</h2>
+              <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 13 }}>
+                Upload a birth certificate (image or PDF). AI will extract child details and auto-fill the new case form.
+              </p>
+            </div>
+            <DocumentUploadForm onSaved={handleDocSaved} />
+          </section>
+        )}
 
         {msg && (
           <div style={{ marginBottom: 18, padding: '12px 14px', borderRadius: 12, background: msg.type === 'error' ? '#FEF2F2' : '#EFF6FF', color: msg.type === 'error' ? '#B91C1C' : '#1E40AF', border: `1px solid ${msg.type === 'error' ? '#FECACA' : '#BFDBFE'}`, fontSize: 14, fontWeight: 650 }}>
