@@ -247,13 +247,27 @@ export default function AdminDashboard() {
       <style>{`
         @keyframes modalIn { from { transform: translate(-50%, calc(-50% + 16px)) scale(0.98); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
         @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes reportIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes statusPulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.18); opacity: 1; } }
         .tr-hover:hover { background: ${T.cardAlt} !important; }
         .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,${darkMode ? '0.4' : '0.1'}) !important; }
         .btn-h:hover { filter: brightness(0.9); }
         .nav-item { transition: all 0.15s; border-radius: 10px; cursor: pointer; }
         .nav-item:hover { background: rgba(255,255,255,0.08) !important; }
         .nav-item.active { background: rgba(255,255,255,0.14) !important; }
-        .report-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,${darkMode ? '0.4' : '0.08'}); }
+        .report-card {
+          animation: reportIn 0.28s ease both;
+          transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+        .report-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 16px 38px rgba(15,23,42,${darkMode ? '0.32' : '0.1'}) !important;
+        }
+        .report-thumb { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .report-thumb:hover { transform: scale(1.04); box-shadow: 0 10px 24px rgba(15,23,42,0.18); }
+        .report-chevron { transition: transform 0.18s ease; }
+        .report-chevron.open { transform: rotate(180deg); }
+        .status-dot { animation: statusPulse 1.8s ease-in-out infinite; }
         .view-btn:hover { background: #EFF6FF !important; color: #2563EB !important; border-color: #BFDBFE !important; }
         .leaflet-container { border-radius: 10px; }
       `}</style>
@@ -563,15 +577,21 @@ export default function AdminDashboard() {
         {/* ── PUBLIC REPORTS ── */}
         {activeTab === 'reports' && (
           <div style={{ padding: '28px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 22 }}>
-              <div>
-                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: T.t1, letterSpacing: '-0.5px' }}>Public Reports</h1>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: T.t3 }}>Submitted anonymously via the public report form.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 22, padding: '22px 24px', borderRadius: 16, background: darkMode ? 'linear-gradient(135deg,#111827,#172554 58%,#1E3A8A)' : 'linear-gradient(135deg,#FFFFFF,#EFF6FF 62%,#DBEAFE)', border: `1px solid ${darkMode ? '#30363D' : '#BFDBFE'}`, boxShadow: darkMode ? '0 16px 42px rgba(0,0,0,0.28)' : '0 16px 42px rgba(37,99,235,0.1)', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', right: -70, top: -90, width: 240, height: 240, borderRadius: '50%', background: darkMode ? 'rgba(59,130,246,0.16)' : 'rgba(147,197,253,0.34)', pointerEvents: 'none' }} />
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Incident intake</div>
+                <h1 style={{ margin: 0, fontSize: 24, fontWeight: 850, color: T.t1, letterSpacing: '-0.5px' }}>Public Reports</h1>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: T.t3 }}>Submitted anonymously via the public report form.</p>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 10, position: 'relative', zIndex: 1 }}>
                 {['new', 'reviewed', 'converted'].map(s => (
-                  <span key={s} style={{ padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: REPORT_STATUS_STYLE[s].bg, color: REPORT_STATUS_STYLE[s].text, border: `1px solid ${REPORT_STATUS_STYLE[s].border}` }}>
-                    {reportsLoaded ? reports.filter(r => r.status === s).length : '—'} {s}
+                  <span key={s} style={{ minWidth: 118, padding: '11px 14px', borderRadius: 14, fontSize: 12, fontWeight: 800, background: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.72)', color: REPORT_STATUS_STYLE[s].text, border: `1px solid ${REPORT_STATUS_STYLE[s].border}`, boxShadow: darkMode ? 'none' : '0 8px 24px rgba(15,23,42,0.06)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 24, fontWeight: 900, color: T.t1, lineHeight: 1 }}>{reportsLoaded ? reports.filter(r => r.status === s).length : '-'}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 11 }}>
+                      <span className="status-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: s === 'new' ? '#EF4444' : s === 'reviewed' ? '#F59E0B' : '#22C55E', display: 'inline-block' }} />
+                      {s}
+                    </span>
                   </span>
                 ))}
               </div>
@@ -582,10 +602,10 @@ export default function AdminDashboard() {
             ) : reports.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 64, color: T.t4 }}>No public reports yet.</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {reports.map(r => (
-                  <div key={r.id} className="report-card" style={{ background: T.card, borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.border}`, borderLeft: `4px solid ${r.status === 'new' ? '#EF4444' : r.status === 'reviewed' ? '#F59E0B' : '#22C55E'}`, transition: 'box-shadow 0.2s' }}>
-                    <div onClick={() => setExpandedReport(expandedReport === r.id ? null : r.id)} style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                  <div key={r.id} className="report-card" style={{ background: T.card, borderRadius: 16, overflow: 'hidden', border: `1px solid ${expandedReport === r.id ? (r.status === 'new' ? '#EF4444' : r.status === 'reviewed' ? '#F59E0B' : '#22C55E') : T.border}`, borderLeft: `6px solid ${r.status === 'new' ? '#EF4444' : r.status === 'reviewed' ? '#F59E0B' : '#22C55E'}`, boxShadow: expandedReport === r.id ? `0 18px 42px ${darkMode ? 'rgba(0,0,0,0.32)' : 'rgba(37,99,235,0.12)'}` : '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div onClick={() => setExpandedReport(expandedReport === r.id ? null : r.id)} style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', background: expandedReport === r.id ? (darkMode ? 'rgba(59,130,246,0.08)' : '#F8FBFF') : 'transparent' }}>
                       <div style={{ flex: 1 }}>
                         <span style={{ fontWeight: 700, color: T.ts, fontSize: 14 }}>{r.child_name || <span style={{ color: T.t4, fontStyle: 'italic' }}>Unknown child</span>}</span>
                         {r.child_age && <span style={{ marginLeft: 8, fontSize: 12, color: T.t4 }}>· Age {r.child_age}</span>}
@@ -594,27 +614,31 @@ export default function AdminDashboard() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: 11, color: T.t4 }}>{new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: REPORT_STATUS_STYLE[r.status].bg, color: REPORT_STATUS_STYLE[r.status].text }}>{r.status}</span>
+                        <span style={{ padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 850, background: REPORT_STATUS_STYLE[r.status].bg, color: REPORT_STATUS_STYLE[r.status].text, border: `1px solid ${REPORT_STATUS_STYLE[r.status].border}`, boxShadow: `0 0 0 3px ${r.status === 'new' ? 'rgba(239,68,68,0.08)' : r.status === 'reviewed' ? 'rgba(245,158,11,0.08)' : 'rgba(34,197,94,0.08)'}` }}>{r.status}</span>
                         <span style={{ fontSize: 10, color: T.t4 }}>{expandedReport === r.id ? '▲' : '▼'}</span>
                       </div>
                     </div>
                     {expandedReport === r.id && (
                       <div style={{ padding: '4px 18px 18px', borderTop: `1px solid ${T.borderSub}`, animation: 'fadeIn 0.2s ease' }}>
-                        <div style={{ background: T.descBg, borderRadius: 8, padding: '12px 14px', margin: '12px 0', fontSize: 14, color: T.t2, lineHeight: 1.7 }}>{r.description}</div>
+                        <div style={{ background: T.descBg, borderRadius: 14, padding: '15px 16px', margin: '12px 0', fontSize: 14, color: T.t2, lineHeight: 1.75, border: `1px solid ${T.borderSub}`, boxShadow: darkMode ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.7)' }}>
+                          <div style={{ fontSize: 10, fontWeight: 850, color: T.t4, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 8 }}>Report Description</div>
+                          {r.description}
+                        </div>
                         {r.evidence_urls?.length > 0 && (
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                            {r.evidence_urls.map((url, i) => <a key={i} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: `1px solid ${T.border}` }} /></a>)}
+                            {r.evidence_urls.map((url, i) => <a key={i} href={url} target="_blank" rel="noopener noreferrer"><img className="report-thumb" src={url} alt="" style={{ width: 92, height: 92, objectFit: 'cover', borderRadius: 12, border: `2px solid ${T.border}`, display: 'block' }} /></a>)}
                           </div>
                         )}
                         {(r.reporter_name || r.reporter_contact) && (
-                          <div style={{ fontSize: 13, color: T.t3, marginBottom: 14, padding: '8px 12px', background: T.descBg, borderRadius: 6 }}>
-                            Reporter: <strong style={{ color: T.t2 }}>{r.reporter_name || 'Anonymous'}</strong>
+                          <div style={{ fontSize: 13, color: T.t3, marginBottom: 14, padding: '12px 14px', background: T.descBg, borderRadius: 12, border: `1px solid ${T.borderSub}` }}>
+                            <span style={{ display: 'block', fontSize: 10, fontWeight: 850, color: T.t4, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 6 }}>Reporter</span>
+                            <strong style={{ color: T.t2 }}>{r.reporter_name || 'Anonymous'}</strong>
                             {r.reporter_contact && <> · {r.reporter_contact}</>}
                           </div>
                         )}
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, paddingTop: 14, borderTop: `1px dashed ${T.border}` }}>
                           {['new', 'reviewed', 'converted'].map(s => (
-                            <button key={s} onClick={() => handleReportStatus(r.id, s)} className="btn-h" style={{ padding: '6px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${r.status === s ? 'transparent' : T.border}`, background: r.status === s ? REPORT_STATUS_STYLE[s].bg : T.card, color: r.status === s ? REPORT_STATUS_STYLE[s].text : T.t3, transition: 'all 0.15s' }}>
+                            <button key={s} onClick={() => handleReportStatus(r.id, s)} className="btn-h" style={{ padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', border: `1px solid ${r.status === s ? REPORT_STATUS_STYLE[s].border : T.border}`, background: r.status === s ? REPORT_STATUS_STYLE[s].bg : T.card, color: r.status === s ? REPORT_STATUS_STYLE[s].text : T.t3, boxShadow: r.status === s ? `0 8px 18px ${s === 'new' ? 'rgba(239,68,68,0.12)' : s === 'reviewed' ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)'}` : 'none', transition: 'all 0.15s' }}>
                               Mark {s}
                             </button>
                           ))}
