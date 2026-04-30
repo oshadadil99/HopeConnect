@@ -70,6 +70,8 @@ export const getPublicReports = () =>
   client.get('/api/admin/public-reports').then(r => r.data);
 export const updatePublicReportStatus = (id, status) =>
   client.put(`/api/admin/public-reports/${id}`, { status }).then(r => r.data);
+export const assignPublicReport = (id, assigned_ngo_id) =>
+  client.put(`/api/admin/public-reports/${id}/assign`, { assigned_ngo_id }).then(r => r.data);
 
 // Public — no auth required
 export const submitPublicReport = (payload) =>

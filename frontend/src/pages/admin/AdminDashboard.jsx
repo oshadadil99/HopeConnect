@@ -90,6 +90,9 @@ export default function AdminDashboard() {
   const [reports, setReports]         = useState([]);
   const [reportsLoaded, setReportsLoaded] = useState(false);
   const [expandedReport, setExpandedReport] = useState(null);
+  const [assigningReportId, setAssigningReportId] = useState(null);
+  const [selectedReportNgo, setSelectedReportNgo] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
   const [mapReady, setMapReady]       = useState(false);
 
   // ── Theme ─────────────────────────────────────────────────────
@@ -242,6 +245,18 @@ export default function AdminDashboard() {
   }
 
   // ── Render ────────────────────────────────────────────────────
+  async function handleAssignPublicReport(reportId) {
+    if (!selectedReportNgo) return;
+    setReportBusy(true);
+    try {
+      const updated = await api.assignPublicReport(reportId, selectedReportNgo);
+      setReports(prev => prev.map(r => r.id === reportId ? { ...r, ...updated } : r));
+      setAssigningReportId(null);
+      setSelectedReportNgo('');
+    } catch (err) { alert(err.response?.data?.error || 'Public report assignment failed.'); }
+    setReportBusy(false);
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
       <style>{`
@@ -636,6 +651,26 @@ export default function AdminDashboard() {
                             {r.reporter_contact && <> · {r.reporter_contact}</>}
                           </div>
                         )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, padding: '12px 14px', background: T.descBg, borderRadius: 12, border: `1px solid ${T.borderSub}` }}>
+                          <div>
+                            <span style={{ display: 'block', fontSize: 10, fontWeight: 850, color: T.t4, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 6 }}>Assigned NGO</span>
+                            <strong style={{ color: T.t2, fontSize: 13 }}>{r.assigned_ngo_id ? ngoName(r.assigned_ngo_id) : 'Unassigned'}</strong>
+                          </div>
+                          {assigningReportId === r.id ? (
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <select value={selectedReportNgo} onChange={e => setSelectedReportNgo(e.target.value)} style={{ padding: '8px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.inputBg, color: T.t1, fontSize: 12, minWidth: 170 }}>
+                                <option value="">Select NGO...</option>
+                                {ngos.map(n => <option key={n.id} value={n.id}>{n.full_name}</option>)}
+                              </select>
+                              <button onClick={() => handleAssignPublicReport(r.id)} disabled={reportBusy || !selectedReportNgo} style={{ padding: '8px 13px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 8, cursor: reportBusy ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 800, opacity: reportBusy ? 0.7 : 1 }}>{reportBusy ? 'Assigning...' : 'Assign'}</button>
+                              <button onClick={() => { setAssigningReportId(null); setSelectedReportNgo(''); }} style={{ padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: 8, background: T.card, cursor: 'pointer', fontSize: 12, color: T.t3 }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setAssigningReportId(r.id); setSelectedReportNgo(r.assigned_ngo_id || ''); }} className="btn-h" style={{ padding: '8px 14px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 800 }}>
+                              {r.assigned_ngo_id ? 'Reassign NGO' : 'Assign NGO'}
+                            </button>
+                          )}
+                        </div>
                         <div style={{ display: 'flex', gap: 8, paddingTop: 14, borderTop: `1px dashed ${T.border}` }}>
                           {['new', 'reviewed', 'converted'].map(s => (
                             <button key={s} onClick={() => handleReportStatus(r.id, s)} className="btn-h" style={{ padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', border: `1px solid ${r.status === s ? REPORT_STATUS_STYLE[s].border : T.border}`, background: r.status === s ? REPORT_STATUS_STYLE[s].bg : T.card, color: r.status === s ? REPORT_STATUS_STYLE[s].text : T.t3, boxShadow: r.status === s ? `0 8px 18px ${s === 'new' ? 'rgba(239,68,68,0.12)' : s === 'reviewed' ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)'}` : 'none', transition: 'all 0.15s' }}>

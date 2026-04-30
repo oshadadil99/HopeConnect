@@ -4,7 +4,7 @@
 -- ============================================================
 
 -- Teardown (safe to re-run)
-DROP TABLE IF EXISTS case_updates, documents, cases, children, profiles CASCADE;
+DROP TABLE IF EXISTS case_updates, documents, cases, children, public_reports, profiles CASCADE;
 DROP TYPE IF EXISTS user_role, case_status, document_type, verification_status CASCADE;
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS handle_new_user();
@@ -65,12 +65,29 @@ CREATE TABLE case_updates (
   created_at  timestamptz DEFAULT now()
 );
 
+-- public reports submitted by non-authenticated users
+CREATE TABLE public_reports (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_name       text,
+  child_age        text,
+  district         text,
+  concern_type     text NOT NULL,
+  description      text NOT NULL,
+  reporter_name    text,
+  reporter_contact text,
+  evidence_urls    text[] DEFAULT '{}',
+  status           text NOT NULL DEFAULT 'new',
+  assigned_ngo_id  uuid REFERENCES profiles(id),
+  created_at       timestamptz DEFAULT now()
+);
+
 -- Enable RLS on all tables
 ALTER TABLE profiles     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE children     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cases        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE case_updates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public_reports ENABLE ROW LEVEL SECURITY;
 
 -- Auto-create profile on signup
 CREATE OR REPLACE FUNCTION handle_new_user()

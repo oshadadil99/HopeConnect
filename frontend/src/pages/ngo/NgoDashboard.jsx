@@ -35,6 +35,10 @@ function childName(c) {
   return `${c.children?.first_name ?? ''} ${c.children?.last_name ?? ''}`.trim() || 'Unnamed child';
 }
 
+function publicCaseName(report) {
+  return report.child_name || 'Unknown child';
+}
+
 function prettyStatus(status) {
   return status?.replace('_', ' ') ?? 'unknown';
 }
@@ -50,10 +54,13 @@ function countBy(items, getKey) {
 export default function NgoDashboard() {
   const { profile, signOut, supabase } = useAuth();
   const [cases, setCases] = useState([]);
+  const [publicReports, setPublicReports] = useState([]);
   const [expandedCase, setExpandedCase] = useState(null);
+  const [expandedPublicReport, setExpandedPublicReport] = useState(null);
   const [updates, setUpdates] = useState({});
   const [documents, setDocuments] = useState({});
   const [loading, setLoading] = useState(true);
+  const [publicLoading, setPublicLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
 
@@ -70,20 +77,29 @@ export default function NgoDashboard() {
 
   async function loadCases() {
     setLoading(true);
+    setPublicLoading(true);
     try {
       setCases(await api.getCases());
     } catch {
       setCases([]);
     }
     setLoading(false);
+
+    try {
+      setPublicReports(await api.getPublicReports());
+    } catch {
+      setPublicReports([]);
+    }
+    setPublicLoading(false);
   }
 
   const stats = useMemo(() => ({
-    total: cases.length,
+    total: cases.length + publicReports.length,
     assigned: cases.filter(c => c.status === 'assigned').length,
     in_progress: cases.filter(c => c.status === 'in_progress').length,
     resolved: cases.filter(c => c.status === 'resolved').length,
-  }), [cases]);
+    public: publicReports.length,
+  }), [cases, publicReports]);
 
   const visibleCases = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -212,7 +228,7 @@ export default function NgoDashboard() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '30px 24px 56px' }}>
+      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '30px 24px 56px', display: 'flex', flexDirection: 'column' }}>
         <section style={{ background: 'linear-gradient(135deg,#DBEAFE,#F8FBFF)', border: '1px solid #BFDBFE', borderRadius: 18, padding: 24, boxShadow: '0 18px 46px rgba(37,99,235,0.12)', marginBottom: 22 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
@@ -226,9 +242,9 @@ export default function NgoDashboard() {
 
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginBottom: 22 }}>
           {[
-            ['Total', stats.total, '#1E3A8A'],
+            ['Total Work', stats.total, '#1E3A8A'],
             ['Assigned', stats.assigned, '#2563EB'],
-            ['In Progress', stats.in_progress, '#0369A1'],
+            ['Public Cases', stats.public, '#7C3AED'],
             ['Resolved', stats.resolved, '#1E40AF'],
           ].map(([label, value, color]) => (
             <div key={label} style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 14, padding: 16, boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }}>
@@ -285,7 +301,7 @@ export default function NgoDashboard() {
           </ChartCard>
         </section>
 
-        <section style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 18, boxShadow: '0 14px 40px rgba(15,23,42,0.06)', overflow: 'hidden' }}>
+        <section style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 18, boxShadow: '0 14px 40px rgba(15,23,42,0.06)', overflow: 'hidden', order: 5 }}>
           <div style={{ padding: 18, borderBottom: '1px solid #EAF2FF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 17 }}>Assigned Cases <span style={{ color: '#94A3B8', fontWeight: 500 }}>({visibleCases.length})</span></h2>
@@ -392,6 +408,95 @@ export default function NgoDashboard() {
                                 <button type="submit" disabled={posting || !updateText.trim()} style={{ padding: '10px 18px', background: posting ? '#BFDBFE' : '#2563EB', color: '#fff', border: 'none', borderRadius: 12, cursor: posting ? 'not-allowed' : 'pointer', fontWeight: 850, fontSize: 13 }}>{posting ? 'Posting...' : 'Post Update'}</button>
                               </form>
                             )}
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 18, boxShadow: '0 14px 40px rgba(15,23,42,0.06)', overflow: 'hidden', marginBottom: 22, order: 4 }}>
+          <div style={{ padding: 18, borderBottom: '1px solid #EAF2FF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', background: 'linear-gradient(135deg,#FFFFFF,#F8FBFF)' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 17 }}>Public Cases <span style={{ color: '#94A3B8', fontWeight: 500 }}>({publicReports.length})</span></h2>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748B' }}>Public reports assigned by admin for NGO review and field follow-up.</p>
+            </div>
+            <span style={{ padding: '6px 12px', borderRadius: 999, background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontSize: 12, fontWeight: 850 }}>
+              {publicReports.filter(r => r.status === 'reviewed').length} active
+            </span>
+          </div>
+
+          <div style={{ padding: 18 }}>
+            {publicLoading ? (
+              <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8' }}>Loading public cases...</div>
+            ) : publicReports.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8' }}>No public cases assigned yet.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
+                {publicReports.map(report => {
+                  const isOpen = expandedPublicReport === report.id;
+                  const status = report.status === 'converted'
+                    ? { bg: '#DBEAFE', text: '#1E40AF', border: '#93C5FD' }
+                    : report.status === 'reviewed'
+                      ? { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A' }
+                      : { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' };
+                  return (
+                    <article key={report.id} style={{ background: isOpen ? '#F8FBFF' : '#fff', borderRadius: 16, border: `1px solid ${isOpen ? '#93C5FD' : '#E2E8F0'}`, overflow: 'hidden', boxShadow: isOpen ? '0 12px 32px rgba(37,99,235,0.12)' : '0 6px 18px rgba(15,23,42,0.04)' }}>
+                      <button onClick={() => setExpandedPublicReport(isOpen ? null : report.id)} style={{ width: '100%', background: 'transparent', border: 'none', padding: 18, cursor: 'pointer', textAlign: 'left' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ fontSize: 16, fontWeight: 850, color: '#0F172A' }}>{publicCaseName(report)}</div>
+                            <div style={{ marginTop: 5, fontSize: 12, color: '#64748B' }}>
+                              {report.child_age ? `Age ${report.child_age}` : 'Age unavailable'} · {report.district || 'District unavailable'}
+                            </div>
+                          </div>
+                          <span style={{ padding: '5px 11px', borderRadius: 999, fontSize: 12, fontWeight: 800, background: status.bg, color: status.text, border: `1px solid ${status.border}` }}>{prettyStatus(report.status)}</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 14 }}>
+                          {report.concern_type && <span style={{ fontSize: 12, background: '#EFF6FF', color: '#2563EB', padding: '4px 10px', borderRadius: 999, fontWeight: 700 }}>{report.concern_type}</span>}
+                          <span style={{ fontSize: 12, background: '#F1F5F9', color: '#475569', padding: '4px 10px', borderRadius: 999 }}>Public report</span>
+                        </div>
+
+                        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', color: '#94A3B8', fontSize: 12 }}>
+                          <span>{new Date(report.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          <span>{isOpen ? 'Close details' : 'Open details'} {isOpen ? '▲' : '▼'}</span>
+                        </div>
+                      </button>
+
+                      {isOpen && (
+                        <div style={{ borderTop: '1px solid #DBEAFE', padding: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
+                          <div style={{ background: '#fff', border: '1px solid #DBEAFE', borderRadius: 14, padding: 14 }}>
+                            <div style={{ fontSize: 11, fontWeight: 850, color: '#2563EB', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Public Report Summary</div>
+                            {report.description ? <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.7 }}>{report.description}</p> : <p style={{ margin: 0, fontSize: 13, color: '#94A3B8' }}>No description provided.</p>}
+                          </div>
+
+                          {report.evidence_urls?.length > 0 && (
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 8 }}>Evidence Photos</div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {report.evidence_urls.map((url, i) => (
+                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img src={url} alt="" style={{ width: 86, height: 86, objectFit: 'cover', borderRadius: 12, border: '2px solid #DBEAFE' }} />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                            <Panel title="Reporter">
+                              <div style={{ fontSize: 13, color: '#334155', fontWeight: 750 }}>{report.reporter_name || 'Anonymous'}</div>
+                              <div style={{ marginTop: 5, fontSize: 12, color: '#94A3B8' }}>{report.reporter_contact || 'No contact details'}</div>
+                            </Panel>
+                            <Panel title="Case Details">
+                              <div style={{ fontSize: 13, color: '#334155' }}>District: <strong>{report.district || 'Unavailable'}</strong></div>
+                              <div style={{ marginTop: 6, fontSize: 13, color: '#334155' }}>Concern: <strong>{report.concern_type || 'Unknown'}</strong></div>
+                            </Panel>
                           </div>
                         </div>
                       )}

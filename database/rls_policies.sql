@@ -127,3 +127,15 @@ CREATE POLICY "NGO: insert case_updates for assigned cases"
 CREATE POLICY "NGO: update own case_updates"
   ON case_updates FOR UPDATE
   USING (get_my_role() = 'ngo' AND ngo_id = auth.uid());
+
+-- ============================================================
+-- public_reports
+-- ============================================================
+CREATE POLICY "Admin: full access on public_reports"
+  ON public_reports FOR ALL
+  USING (get_my_role() = 'admin')
+  WITH CHECK (get_my_role() = 'admin');
+
+CREATE POLICY "NGO: read assigned public_reports"
+  ON public_reports FOR SELECT
+  USING (get_my_role() = 'ngo' AND assigned_ngo_id = auth.uid());

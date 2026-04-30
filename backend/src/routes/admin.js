@@ -85,11 +85,17 @@ router.post('/public-reports', async (req, res) => {
   res.status(201).json(data);
 });
 
-router.get('/public-reports', requireAuth, requireRole('admin'), async (req, res) => {
-  const { data, error } = await supabase
+router.get('/public-reports', requireAuth, requireRole('admin', 'ngo'), async (req, res) => {
+  let query = supabase
     .from('public_reports')
     .select('*')
     .order('created_at', { ascending: false });
+
+  if (req.user.role === 'ngo') {
+    query = query.eq('assigned_ngo_id', req.user.id);
+  }
+
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -102,6 +108,30 @@ router.put('/public-reports/:id', requireAuth, requireRole('admin'), async (req,
     .eq('id', req.params.id)
     .select()
     .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.put('/public-reports/:id/assign', requireAuth, requireRole('admin'), async (req, res) => {
+  const { assigned_ngo_id } = req.body;
+  if (!assigned_ngo_id) return res.status(400).json({ error: 'assigned_ngo_id is required' });
+
+  const { data: ngo, error: ngoError } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', assigned_ngo_id)
+    .eq('role', 'ngo')
+    .single();
+
+  if (ngoError || !ngo) return res.status(400).json({ error: 'Target profile is not a valid NGO' });
+
+  const { data, error } = await supabase
+    .from('public_reports')
+    .update({ assigned_ngo_id, status: 'reviewed' })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });

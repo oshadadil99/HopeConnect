@@ -104,11 +104,7 @@ export default function DocumentUploadForm({ onSaved }) {
       setForm(filled);
 
       const age = calcAge(data.dateOfBirth);
-      if (age !== null && age < 16) {
-        setAgeAlert(age);
-      } else {
-        setAgeAlert(null);
-      }
+      setAgeAlert(age !== null ? age : null);
     } catch {
       setMsg({ type: 'error', text: 'Extraction failed. Check the file and try again.' });
     }
@@ -236,8 +232,26 @@ export default function DocumentUploadForm({ onSaved }) {
         </button>
       )}
 
-      {/* Under-16 age alert */}
-      {ageAlert !== null && (
+      {/* Age validation banner */}
+      {ageAlert !== null && ageAlert >= 16 && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+          padding: '14px 16px', borderRadius: 14,
+          background: '#FEF2F2', border: '1px solid #FECACA',
+        }}>
+          <div style={{ fontSize: 22, lineHeight: 1 }}>🚫</div>
+          <div>
+            <div style={{ fontWeight: 850, fontSize: 14, color: '#991B1B' }}>
+              Registration Blocked — Individual is {ageAlert} years old
+            </div>
+            <div style={{ marginTop: 4, fontSize: 12, color: '#B91C1C', lineHeight: 1.6 }}>
+              This person is older than 16 years and cannot be registered as a child in HopeConnect. Only individuals under 16 are eligible for child protection registration.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ageAlert !== null && ageAlert < 16 && (
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: 12,
           padding: '14px 16px', borderRadius: 14,
@@ -343,12 +357,12 @@ export default function DocumentUploadForm({ onSaved }) {
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || (ageAlert !== null && ageAlert >= 16)}
               style={{
                 flex: 1, padding: '11px 20px', border: 'none', borderRadius: 12,
-                background: saving ? '#BFDBFE' : '#2563EB',
+                background: (ageAlert !== null && ageAlert >= 16) ? '#FCA5A5' : saving ? '#BFDBFE' : '#2563EB',
                 color: '#fff', fontWeight: 850, fontSize: 14,
-                cursor: saving ? 'not-allowed' : 'pointer',
+                cursor: (saving || (ageAlert !== null && ageAlert >= 16)) ? 'not-allowed' : 'pointer',
               }}
             >
               {saving ? 'Saving...' : 'Save Child Profile'}
