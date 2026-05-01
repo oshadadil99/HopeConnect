@@ -80,6 +80,7 @@ export default function SocialWorkerPortal() {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [showDocVerify, setShowDocVerify] = useState(false);
+  const [dobWarning, setDobWarning] = useState(false);
 
   useEffect(() => {
     loadCases();
@@ -137,6 +138,17 @@ export default function SocialWorkerPortal() {
 
   function setField(field, value) {
     setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  function handleDobChange(value) {
+    setField('date_of_birth', value);
+    if (!value) { setDobWarning(false); return; }
+    const dob = new Date(value);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+    setDobWarning(age > 16);
   }
 
   function handleImageChange(e) {
@@ -204,6 +216,7 @@ export default function SocialWorkerPortal() {
       });
       setMsg({ type: 'success', text: 'Case created successfully.' });
       setForm(EMPTY_FORM);
+      setDobWarning(false);
       setImages([]);
       setImagePreviews([]);
       setShowForm(false);
@@ -306,7 +319,20 @@ export default function SocialWorkerPortal() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14, marginBottom: 14 }}>
                 <Field label="First Name *"><input style={inputStyle} required value={form.first_name} onChange={e => setField('first_name', e.target.value)} placeholder="Child's first name" /></Field>
                 <Field label="Last Name *"><input style={inputStyle} required value={form.last_name} onChange={e => setField('last_name', e.target.value)} placeholder="Child's last name" /></Field>
-                <Field label="Date of Birth *"><input style={inputStyle} type="date" required value={form.date_of_birth} onChange={e => setField('date_of_birth', e.target.value)} /></Field>
+                <div>
+                  <Field label="Date of Birth *">
+                    <input style={{ ...inputStyle, borderColor: dobWarning ? '#F87171' : '#BFDBFE' }} type="date" required value={form.date_of_birth} onChange={e => handleDobChange(e.target.value)} />
+                  </Field>
+                  {dobWarning && (
+                    <div style={{ marginTop: 8, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>⚠️</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#B91C1C' }}>Cannot proceed — Age is over 16 years</div>
+                        <div style={{ fontSize: 12, color: '#DC2626', marginTop: 2 }}>This platform only registers children aged 16 and below. Please verify the date of birth.</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <Field label="District"><select style={inputStyle} value={form.district} onChange={e => setField('district', e.target.value)}><option value="">Select district...</option>{DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}</select></Field>
                 <Field label="Location / Area"><input style={inputStyle} value={form.location} onChange={e => setField('location', e.target.value)} placeholder="e.g. Galle Road, Colombo 3" /></Field>
                 <Field label="Needs"><input style={inputStyle} value={form.needs} onChange={e => setField('needs', e.target.value)} placeholder="food, shelter, medical care" /></Field>
@@ -335,7 +361,7 @@ export default function SocialWorkerPortal() {
                 )}
               </div>
 
-              <button type="submit" disabled={submitting} style={{ padding: '11px 22px', background: submitting ? '#BFDBFE' : '#2563EB', color: '#fff', border: 'none', borderRadius: 12, cursor: submitting ? 'not-allowed' : 'pointer', fontWeight: 850, fontSize: 14 }}>
+              <button type="submit" disabled={submitting || dobWarning} style={{ padding: '11px 22px', background: submitting || dobWarning ? '#BFDBFE' : '#2563EB', color: '#fff', border: 'none', borderRadius: 12, cursor: submitting || dobWarning ? 'not-allowed' : 'pointer', fontWeight: 850, fontSize: 14 }}>
                 {submitting ? 'Saving...' : 'Create Case'}
               </button>
             </form>
